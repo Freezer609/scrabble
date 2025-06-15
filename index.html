@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrabble Assistant Complet</title>
+    <!-- Chargement de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Définition de la police "Inter" */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Un arrière-plan doux */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Aligner en haut */
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box; /* Pour inclure le padding dans la largeur/hauteur */
+            flex-wrap: wrap; /* Permet aux éléments de s'enrouler sur les petits écrans */
+            gap: 20px; /* Espace entre les blocs */
+        }
+        /* Styles pour les champs de saisie désactivés */
+        input:disabled, button:disabled {
+            cursor: not-allowed;
+            background-color: #e2e8f0; /* Couleur de fond pour désactivé */
+            opacity: 0.7;
+        }
+        /* Animation pour le chargement */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .animate-spin-custom {
+            animation: spin 1s linear infinite;
+        }
+
+        /* Styles spécifiques au plateau de Scrabble (16x16 pour inclure les headers) */
+        #scrabble-board {
+            display: grid;
+            grid-template-columns: repeat(16, minmax(0, 1fr)); /* 16 colonnes (1 pour les numéros, 15 pour le jeu) */
+            grid-template-rows: repeat(16, minmax(0, 1fr)); /* 16 lignes (1 pour les lettres, 15 pour le jeu) */
+            width: clamp(300px, 95vw, 600px); /* Taille du plateau adaptable, légèrement plus grand */
+            height: clamp(300px, 95vw, 600px);
+            border: 2px solid #333;
+            background-color: #eee;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        /* Ajustement de la taille de la première colonne/ligne des headers */
+        #scrabble-board > :nth-child(16n+1) { /* Toutes les premières cellules de chaque ligne */
+            width: 1.5rem; /* Largeur fixe pour les numéros de ligne */
+            min-width: 1.5rem;
+            max-width: 1.5rem;
+            flex-grow: 0;
+            flex-shrink: 0;
+        }
+        #scrabble-board > :nth-child(n) { /* Toutes les cellules de la première ligne */
+            height: 1.5rem; /* Hauteur fixe pour les lettres de colonne */
+            min-height: 1.5rem;
+            max-height: 1.5rem;
+            flex-grow: 0;
+            flex-shrink: 0;
+        }
+        #scrabble-board > .board-cell { /* Réinitialise pour les vraies cellules de jeu */
+            width: auto;
+            height: auto;
+        }
+
+
+        .board-cell {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.75rem; /* Taille du texte du bonus */
+            font-weight: bold;
+            color: #fff;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            user-select: none;
+            /* Transition pour les changements de couleur */
+            transition: background-color 0.3s ease;
+        }
+        .header-cell {
+            background-color: #d1d9e0; /* Couleur des cellules d'en-tête */
+            color: #333;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.8rem;
+        }
+        .header-cell:first-child {
+            background-color: #c0c8d0; /* Coin supérieur gauche */
+        }
+
+        .board-cell input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            border: none;
+            text-align: center;
+            font-size: 1.2rem; /* Taille de la lettre saisie */
+            font-weight: bold;
+            color: #333;
+            background: transparent;
+            text-transform: uppercase;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* Couleurs des cases spéciales Scrabble */
+        .normal { background-color: #e0e0e0; }
+        .dl { background-color: #a7d0e3; } /* Bleu clair */
+        .tl { background-color: #4b92c4; } /* Bleu foncé */
+        .dw { background-color: #f7a0a0; } /* Rouge clair */
+        .tw { background-color: #d14a4a; } /* Rouge foncé */
+        .star { background-color: #ffcc00; } /* Jaune étoile */
+
+        /* Texte des bonus */
+        .dl::before { content: 'LD'; color: #000; opacity: 0.6; }
+        .tl::before { content: 'LT'; color: #000; opacity: 0.6; }
+        .dw::before { content: 'MD'; color: #000; opacity: 0.6; }
+        .tw::before { content: 'MT'; color: #000; opacity: 0.6; }
+        .star::before { content: '★'; color: #000; font-size: 1.5rem; }
+
+        /* Masque le texte du bonus quand une lettre est tapée */
+        .board-cell.has-letter::before {
+            content: none !important;
+        }
+        .board-cell.has-letter input {
+            font-size: 1.8rem; /* Agrandit la lettre pour plus de visibilité */
+        }
+
+        /* Classe pour le surlignage du meilleur mot */
+        .highlight-best-word {
+            background-color: #4CAF50 !important; /* Vert */
+            color: white !important;
+            box-shadow: inset 0 0 0 2px #388E3C; /* Bordure intérieure verte foncée */
+        }
+        .highlight-best-word input {
+            color: white !important; /* Rend la lettre blanche sur fond vert */
+        }
+
+        /* Styles pour la liste de résultats */
+        #results ul {
+            columns: 2;
+            -webkit-columns: 2;
+            -moz-columns: 2;
+            column-gap: 20px;
+        }
+        #results li {
+            margin-bottom: 5px;
+        }
+        @media (max-width: 640px) {
+            #results ul {
+                columns: 1;
+            }
+        }
+    </style>
+</head>
+<body class="selection:bg-yellow-300 selection:text-gray-900">
+    <!-- Main container for the form and results -->
+    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full transform transition-all duration-300 hover:scale-[1.01]">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-6 flex items-center justify-center">
+            <svg class="w-10 h-10 mr-3 text-red-600" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path>
+            </svg>
+            Scrabble Assistant
+        </h1>
+
+        <p class="text-center text-gray-600 mb-8 text-lg">
+            Entre les lettres que tu as en main (sans accents, '*' pour joker), puis place des lettres sur le plateau. Je te suggérerai les meilleurs placements !
+        </p>
+
+        <div class="mb-4">
+            <label for="lettersInput" class="block text-gray-700 text-sm font-semibold mb-2">Tes lettres :</label>
+            <input type="text" id="lettersInput" placeholder="Ex: a*cdefg"
+                   class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200 text-lg uppercase tracking-wider text-gray-800"
+                   oninput="this.value = this.value.toLowerCase().replace(/[^a-z*]/g, '');" />
+        </div>
+
+        <button id="findWordsBtn"
+                class="w-full bg-gradient-to-r from-blue-600 to-blue-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:from-blue-700 hover:to-blue-900 transition duration-300 transform hover:-translate-y-1 active:scale-95 flex items-center justify-center">
+            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            Trouver les meilleurs placements
+        </button>
+
+        <div class="mt-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Meilleurs placements possibles :</h2>
+            <div id="results" class="bg-gray-50 p-6 rounded-xl border border-gray-200 min-h-[150px] overflow-auto max-h-[400px] shadow-inner text-gray-700 leading-relaxed text-lg">
+                <p class="text-center text-gray-500">Les suggestions de placement et de score apparaîtront ici.</p>
+            </div>
+            <div id="loading" class="hidden text-center mt-4 text-blue-600 font-semibold animate-spin-custom">
+                <svg class="inline w-6 h-6 mr-2 text-blue-500 animate-spin-custom" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004 16.087v-2.383a1 1 0 011-.997h13.27a1 1 0 011 .997v2.383A8.001 8.001 0 0020.938 12M3.197 12A8.001 8.001 0 0120 7.913v2.383a1 1 0 01-1 .997H5.73a1 1 0 01-1-.997V7.913A8.001 8.001 0 013.197 12z"></path>
+                </svg>
+                <span id="loading-message">Recherche des placements...</span>
+            </div>
+        </div>
+
+        <div id="errorBox" class="hidden mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl">
+            <p class="font-semibold">Erreur :</p>
+            <p id="errorMessage"></p>
+        </div>
+    </div>
+
+    <!-- Container for the Scrabble board -->
+    <div class="bg-white p-6 rounded-2xl shadow-xl transform transition-all duration-300 hover:scale-[1.01]">
+        <h2 class="text-2xl font-bold text-center text-gray-800 mb-4">Plateau de Scrabble</h2>
+        <div id="scrabble-board">
+            <!-- Board cells will be generated here by JavaScript -->
+        </div>
+        <button id="clearBoardBtn"
+                class="mt-4 w-full bg-red-500 text-white font-bold py-2 px-4 rounded-xl shadow-lg hover:bg-red-600 transition duration-300 transform hover:-translate-y-1 active:scale-95 flex items-center justify-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
+            Effacer le plateau
+        </button>
+    </div>
+
+    <script>
+        // DOM element references
+        const lettersInput = document.getElementById('lettersInput');
+        const findWordsBtn = document.getElementById('findWordsBtn');
+        const resultsDiv = document.getElementById('results');
+        const loadingDiv = document.getElementById('loading');
+        const loadingMessageSpan = document.getElementById('loading-message');
+        const errorBox = document.getElementById('errorBox');
+        const errorMessage = document.getElementById('errorMessage');
+        const scrabbleBoardDiv = document.getElementById('scrabble-board');
+        const clearBoardBtn = document.getElementById('clearBoardBtn');
+
+        // Hardcoded dictionary of ~4000 common French words, normalized (lowercase, no accents)
+        // This list is curated to be a useful subset for Scrabble without being too large.
+        const frenchDictionary = [
+            "a", "aie", "ail", "air", "ais", "ait", "an", "ans", "apres", "arbre", "arc", "as", "assez", "au", "aucun", "avec", "avoir", "bas", "beau", "belle", "bien", "blanc", "bleu", "bois", "bon", "bord", "bouche", "bout", "bras", "bref", "brun", "but", "ca", "car", "carte", "cas", "ce", "cela", "celle", "cent", "chaque", "chat", "chemin", "cher", "chez", "choix", "chose", "ciel", "cinq", "clair", "classe", "coeur", "coin", "comme", "compte", "contre", "corps", "cote", "coup", "cour", "court", "creer", "croire", "dans", "de", "debout", "dedans", "deja", "demain", "depuis", "derriere", "des", "deux", "devant", "devenir", "devoir", "dire", "doit", "donc", "donner", "dont", "dos", "droit", "du", "durer", "eau", "elle", "elles", "en", "encore", "entre", "entrer", "envoyer", "est", "et", "etre", "eu", "euh", "eux", "face", "faire", "fais", "fait", "falloir", "famille", "fenetre", "fermer", "feu", "fille", "fin", "fois", "fond", "force", "foret", "former", "fort", "frapper", "frere", "froid", "front", "gauche", "gens", "grand", "guerre", "gout", "gros", "guerir", "haut", "hier", "homme", "ici", "idee", "il", "ils", "impossible", "interet", "jamais", "jambe", "jardin", "je", "jeu", "jeune", "joie", "joli", "jouer", "jour", "jusque", "juste", "la", "laisser", "langue", "le", "leger", "lent", "leur", "leve", "libre", "ligne", "lire", "lit", "long", "loin", "lumiere", "lune", "lui", "machine", "main", "mais", "maison", "mal", "manger", "marcher", "mari", "matin", "mauvais", "meilleur", "meme", "mer", "mere", "metre", "mettre", "midi", "mieux", "milieu", "mille", "mince", "moins", "mon", "monde", "montagne", "montrer", "mort", "mot", "moyen", "mur", "naitre", "nation", "nature", "ne", "nez", "ni", "noir", "nom", "non", "nord", "notre", "nous", "nouveau", "nuit", "nu", "objet", "oeil", "oiseau", "ombre", "on", "ont", "open", "or", "orange", "ordre", "oreille", "ouvrir", "page", "pain", "paix", "papa", "par", "pareil", "parler", "part", "partir", "pas", "passer", "pauvre", "payer", "pays", "peau", "peine", "pendant", "penser", "petit", "peur", "pied", "pierre", "place", "plaisir", "plan", "plein", "pleurer", "plus", "plusieurs", "point", "police", "porte", "poser", "possible", "pour", "pourquoi", "pourtant", "premier", "prendre", "pres", "present", "presque", "pret", "preuve", "prevoir", "prier", "prince", "probleme", "propre", "puis", "qualite", "quand", "quant", "quatre", "que", "quel", "quelle", "quelque", "qui", "quoi", "racine", "raison", "rapide", "rare", "recevoir", "refuser", "regard", "regarder", "rein", "rentrer", "repondre", "repos", "rester", "retour", "revenir", "reve", "rien", "rire", "riviere", "roi", "rond", "rose", "route", "rouge", "sable", "salle", "sang", "sans", "savoir", "se", "sec", "sembler", "sens", "sentir", "sept", "serieux", "servir", "seul", "si", "signe", "silence", "simple", "six", "soeur", "soin", "soir", "sol", "soleil", "sombre", "son", "songer", "sonner", "sorte", "sortie", "souvenir", "speciale", "sport", "style", "suite", "sur", "table", "taille", "tant", "tard", "temps", "tenir", "terre", "tete", "texte", "tiens", "tirer", "titre", "toi", "tomber", "ton", "tous", "tout", "toute", "train", "travailler", "travers", "tres", "trois", "trop", "trouver", "un", "une", "univers", "usage", "utile", "vacances", "vague", "valeur", "vent", "venir", "vendre", "vert", "verre", "vers", "vie", "vieux", "ville", "vin", "visage", "vite", "vivre", "voici", "voila", "voir", "voisin", "voix", "vouloir", "voyage", "vrai", "vue", "wagon", "yeux", "zero", "zigzag", "zone", "zozoter", "zoulou", "abattu", "abuser", "accord", "acheter", "agir", "aide", "aider", "aimer", "ajouter", "aller", "amiable", "amuser", "ancien", "animer", "annuler", "appeler", "apporter", "apprendre", "approcher", "apres-midi", "argent", "arreter", "arriver", "asseoir", "attendre", "atteindre", "attraper", "avancer", "avant", "aventure", "avis", "baisser", "baiser", "balancer", "bande", "battre", "benefice", "besoin", "blesser", "boire", "bonheur", "bouton", "brillant", "briser", "bruit", "bruler", "calme", "calmer", "capable", "capturer", "casse", "causer", "celebrer", "cesser", "chacun", "changer", "chanson", "chanter", "charger", "chaud", "cheveux", "cheval", "choisir", "chute", "clair", "cocher", "combien", "commander", "commencer", "comment", "compagnie", "completer", "comprendre", "comte", "compter", "conduire", "confiance", "connaître", "conseil", "construire", "content", "continuer", "corde", "coucher", "couleur", "couper", "courir", "couvrir", "craindre", "crier", "critique", "cuire", "curieux", "danger", "debattre", "decouvrir", "defendre", "delicat", "delivrer", "demander", "demeurer", "depart", "dependre", "depenser", "deplacer", "deposer", "derouler", "desir", "desirer", "dessous", "dessus", "destin", "detruire", "developper", "difference", "difficile", "disparaitre", "disputer", "distance", "distribuer", "diviser", "doigt", "dommage", "dormir", "douce", "douleur", "douter", "doux", "draper", "droite", "ecrire", "ecouter", "egale", "eclair", "elargir", "elever", "eloigner", "empecher", "employer", "emporter", "enchanter", "encourager", "enfant", "enfin", "enlever", "entendre", "entourer", "entrainer", "enveloppe", "epouser", "eprouver", "equipe", "erreur", "espoir", "essayer", "essentiel", "etablir", "etage", "etalon", "etat", "etendre", "etrange", "etre", "etudier", "exact", "exister", "expliquer", "exprimer", "exterieur", "facile", "faible", "faim", "fallu", "fantome", "fatigue", "faute", "favori", "femme", "fer", "fermer", "fete", "fideles", "fier", "figure", "file", "fille", "fils", "finir", "fixer", "fleur", "fleuve", "foi", "folie", "force", "former", "fort", "foule", "fournir", "franc", "frapper", "frere", "froid", "fruit", "fuir", "futur", "gagner", "galerie", "garde", "garder", "gauche", "geler", "general", "genial", "genoux", "girafe", "gouter", "gouverner", "grimper", "gros", "guide", "habiter", "habitude", "haut", "herbe", "heure", "honneur", "horizon", "humain", "humble", "image", "imaginer", "important", "impossible", "impression", "inclure", "indiquer", "informer", "inquiet", "inserer", "insister", "instant", "instruire", "intelligence", "interesser", "interieur", "interroger", "intervenir", "intime", "introduire", "inutile", "inventer", "inviter", "jadis", "jeter", "joindre", "joue", "jouer", "juger", "jurer", "juste", "lacher", "lait", "laisser", "lame", "lanterne", "lancer", "langue", "large", "larme", "laver", "leger", "legume", "lent", "lettre", "lever", "liberte", "libre", "lier", "ligne", "limite", "linge", "lire", "lis", "lit", "livre", "loi", "lointain", "long", "longtemps", "lourd", "lumiere", "lutter", "machine", "magnifique", "maigre", "maintenant", "maire", "maison", "malade", "malheur", "maman", "manger", "manque", "marche", "marcher", "mari", "mariage", "marin", "marque", "masque", "matin", "mauvais", "mecanisme", "medecin", "meilleur", "melanger", "membre", "memoire", "menacer", "mener", "mentir", "merci", "merde", "mere", "merveille", "mesure", "metre", "mettre", "midi", "mieux", "milieu", "mille", "mince", "ministre", "miracle", "mode", "moderne", "moin", "moins", "moment", "monde", "montagne", "monter", "montrer", "morceau", "moyen", "mur", "muscle", "mystere", "naitre", "nation", "nature", "necessaire", "negliger", "neige", "nettoyer", "neuf", "niveau", "noir", "nombre", "normal", "note", "nouveau", "nuit", "objet", "obliger", "observer", "obtenir", "occasion", "occuper", "ocean", "offrir", "oignon", "oiseau", "ombre", "ongle", "opinion", "ordre", "oreille", "oublier", "oui", "ouvrir", "page", "pain", "paire", "palais", "paraitre", "parler", "partager", "passer", "patient", "patron", "pauvre", "peintre", "peine", "pendant", "penetrer", "penser", "perdre", "personne", "petit", "peur", "photographie", "piece", "pied", "pierre", "place", "plaisir", "plan", "planter", "plein", "pleurer", "plus", "plutot", "poche", "poing", "point", "poisson", "police", "porte", "porter", "poser", "position", "possible", "pouvoir", "precieux", "preferer", "premier", "prendre", "preparer", "present", "presque", "prier", "prince", "prison", "prive", "probleme", "promettre", "propre", "proteger", "prouver", "public", "puissant", "quartier", "quand", "quantite", "question", "queue", "racine", "radio", "rapide", "rappeler", "rare", "rassembler", "recevoir", "rechercher", "reclamer", "recommander", "reconnaître", "reflechir", "refuser", "regard", "regarder", "regle", "regretter", "rejoindre", "remarquer", "remettre", "remplacer", "remplir", "rencontrer", "rendre", "renoncer", "rentrer", "reparer", "repas", "repondre", "repos", "representer", "reserver", "resoudre", "respecter", "respirer", "responsable", "ressembler", "rester", "resultat", "retirer", "retour", "retrouver", "reussir", "reve", "reveiller", "revenir", "revoir", "riche", "rideau", "rien", "rire", "risque", "river", "robe", "roi", "rompre", "rond", "rose", "rouge", "rouler", "route", "royal", "rue", "sable", "saison", "salle", "salut", "sauter", "sauver", "savoir", "science", "secret", "secours", "sens", "sentir", "separer", "serieux", "serrer", "servir", "seul", "si", "signe", "silence", "simple", "situation", "soeur", "soif", "soir", "soldat", "soleil", "sommeil", "songe", "sonner", "sortir", "souffrir", "souhaiter", "soulager", "sourire", "soutenir", "souvenir", "speciale", "stage", "station", "stop", "style", "subir", "succes", "suivre", "supporter", "surprendre", "surtout", "table", "tableau", "tacher", "taille", "taire", "talent", "tandis", "tapis", "tard", "tasse", "teindre", "telephone", "temoin", "tempete", "temps", "tendre", "tenir", "tenter", "terminer", "terre", "terrible", "tete", "theatre", "tirer", "titre", "toucher", "toujours", "tourner", "tout", "tradition", "train", "traiter", "tranquille", "transferer", "transformer", "transporter", "travailler", "travers", "treize", "trente", "trouver", "unir", "usage", "usuel", "utile", "vacances", "vague", "valeur", "vent", "ventre", "verite", "verre", "vers", "vertical", "veste", "vie", "vieil", "vieux", "ville", "vin", "visage", "visiter", "vite", "vivre", "voici", "voila", "voile", "voir", "voisin", "voiture", "voix", "vouloir", "voyage", "vrai", "vue", "wagon", "yeux", "zero", "zigzag", "zone", "zoologiste",
+            "abandonner", "aborder", "abriter", "absent", "absolu", "abuser", "accepter", "accompagner", "accomplir", "accord", "accorder", "accourir", "accrocher", "accumuler", "accuser", "acheter", "achever", "acquérir", "activer", "adapter", "adhérer", "admettre", "admirer", "adorer", "adresse", "adresser", "advenir", "affaire", "affecter", "afficher", "affirmer", "affronter", "agacer", "agent", "agir", "agiter", "agrafer", "agréable", "agreer", "aider", "aigle", "aimer", "ainsi", "ajouter", "alarme", "alerter", "aligner", "aliment", "allee", "alleger", "aller", "allonger", "allumer", "amasser", "ambiance", "ame", "améliorer", "amenager", "amener", "amer", "ami", "amicale", "amour", "ample", "amuser", "analyser", "ancien", "angle", "animer", "annonce", "annoncer", "annuel", "annuler", "anticiper", "apercevoir", "aplanir", "apostrophe", "apparaitre", "appareil", "apparent", "appartenir", "appeler", "applaudir", "appliquer", "apporter", "apprecier", "apprendre", "approcher", "approprier", "approuver", "appuyer", "apres", "aptitude", "arbre", "arc", "architecte", "architecture", "ardent", "argent", "arme", "armer", "arracher", "arranger", "arreter", "arriere", "arriver", "art", "articuler", "artisan", "aspect", "aspirer", "assembler", "asseoir", "assurer", "atteindre", "attendre", "attentif", "attention", "attirer", "attitude", "attraper", "audace", "audience", "augmenter", "auteur", "autour", "autre", "avancer", "avant", "avantage", "avare", "avenir", "aventure", "avertir", "aveugle", "avis", "avocat", "avoir", "axer", "bachelier", "bagage", "bagarre", "baguette", "bain", "baisser", "baiser", "balancer", "balayer", "balle", "ballet", "banal", "bande", "bandit", "bannir", "barbe", "barque", "barriere", "bas", "base", "baser", "bataille", "bateau", "batiment", "batir", "battre", "beau", "beauté", "bébé", "bel", "belle", "bénéfice", "bénéficier", "berger", "besoin", "bête", "bibliotheque", "bien", "bientôt", "biere", "blanc", "blesser", "bleu", "blond", "boire", "bois", "boite", "bon", "bonheur", "bord", "botte", "bouche", "boucher", "bougie", "bouillir", "boule", "bourse", "bout", "bouteille", "branche", "bras", "bref", "briller", "briser", "bruit", "bruler", "brun", "brusque", "bureau", "but", "cabinet", "cable", "café", "cage", "cahier", "caisse", "calculer", "calme", "calmer", "camarade", "campagne", "canal", "canard", "candidat", "capable", "capacité", "captiver", "capturer", "caractère", "caresser", "carré", "carte", "cas", "caser", "casque", "casser", "catastrophe", "cause", "causer", "cavalier", "céder", "ceinture", "celebrer", "celèbre", "celle", "celui", "cendre", "cent", "central", "centre", "cependant", "cerner", "certain", "chacun", "chaîne", "chaise", "chaleur", "chambre", "champ", "chance", "changer", "chant", "chanter", "chaque", "charger", "charme", "chasser", "chaud", "chauffer", "chef", "chemin", "chemise", "cher", "chercher", "cheval", "cheveux", "chez", "chien", "chiffre", "choisir", "choix", "chose", "chuchoter", "chut", "ciel", "cigare", "cime", "cinq", "circonstance", "citer", "citerne", "citoyen", "civil", "clair", "claire", "classe", "classer", "clef", "client", "climat", "cloche", "clore", "cocher", "code", "coeur", "coffre", "coiffer", "coin", "colere", "coller", "collier", "colline", "colonie", "combattre", "combien", "combiner", "commander", "comme", "commencer", "comment", "commun", "communication", "compagnie", "comparer", "competence", "completer", "compliquer", "comporter", "composer", "comprendre", "compte", "compter", "concéder", "concerner", "conclure", "concours", "concurrence", "condamner", "condition", "conduire", "confiance", "confier", "confirmer", "confondre", "confort", "confronter", "congelé", "connaître", "conquerir", "conscience", "conseil", "conserver", "considérer", "consoler", "constant", "constater", "constituer", "construire", "contact", "contacter", "contenir", "content", "contenter", "conter", "contester", "continuer", "contraire", "contre", "contribuer", "controle", "controler", "convenable", "convenir", "conversation", "convertir", "convier", "convaincre", "cooperer", "copier", "corde", "corps", "correct", "corriger", "coucher", "couleur", "couloir", "coup", "couper", "courage", "courir", "couronne", "court", "couteau", "couter", "couverture", "couvrir", "craindre", "cran", "crayon", "creer", "creuser", "crier", "crime", "crise", "critique", "croire", "croiser", "croitre", "cruel", "cuire", "cuisiner", "culture", "curieux", "danger", "dans", "data", "date", "dater", "debat", "debattre", "debout", "debut", "decevoir", "decider", "declarer", "decouper", "decouvrir", "dedans", "deduire", "defaut", "defendre", "defier", "definir", "degager", "degre", "dehors", "deja", "delai", "delicat", "delivrer", "demain", "demander", "demeurer", "demi", "demission", "demontrer", "dent", "depart", "depasser", "dependre", "depenser", "deplacer", "deplaire", "deposer", "depuis", "deranger", "dernier", "derouler", "derriere", "des", "desagreable", "descendre", "deserte", "desir", "desirer", "desoler", "dessous", "dessus", "destin", "detacher", "detail", "detecter", "detendre", "determiner", "detruire", "devenir", "developper", "deviner", "devoir", "devoué", "dialogue", "dicter", "difference", "different", "difficile", "dignite", "dimanche", "diminuer", "diner", "dire", "direct", "diriger", "discipline", "discours", "discuter", "disparaitre", "dispenser", "disposer", "disputer", "distance", "distinct", "distinguer", "distribuer", "diviser", "dix", "docteur", "doigt", "dommage", "dominer", "donc", "donner", "dont", "dormir", "dos", "douce", "douleur", "douter", "doux", "douzaine", "drap", "draper", "droite", "droit", "drole", "du", "durer", "echec", "echanger", "echarpe", "eclair", "eclairer", "eclater", "ecole", "economie", "ecouter", "ecran", "ecrire", "edifice", "editer", "education", "efficace", "effort", "egal", "egalement", "eglise", "eh", "elargir", "electrique", "element", "elever", "loigner", "eloger", "eloquent", "emballer", "embarquer", "embarrasser", "embaucher", "embrasser", "emettre", "emigrer", "emotion", "empecher", "empereur", "empire", "employer", "emporter", "emprunter", "en", "enchanter", "enclenchement", "encore", "encourager", "encre", "endormir", "endroit", "energie", "enfance", "enfant", "enfermer", "enfin", "enfoncer", "engagement", "engager", "engin", "enlever", "ennemi", "ennui", "ennuyer", "enorme", "enquete", "enseigner", "ensemble", "ensuite", "entendre", "entier", "entourer", "entrainement", "entrainer", "entre", "entreprise", "entrer", "entretenir", "entrevoir", "envahir", "envelopper", "environ", "envoyer", "epargner", "epaule", "epeautre", "epee", "epingle", "epoque", "epouser", "eprouver", "epuisé", "equilibrer", "equipe", "erreur", "escalier", "escapade", "espace", "esperance", "esperer", "esprit", "essayer", "essentiel", "est", "estimer", "etablir", "etage", "etalage", "etalon", "etat", "etendre", "eternel", "ethique", "etonner", "etrange", "etre", "etroit", "etude", "etudier", "evalue", "evaluer", "eviter", "exact", "exagérer", "examiner", "exemple", "exercer", "exiger", "exister", "experience", "experimenter", "expert", "expliquer", "exploiter", "explorer", "exposer", "exprimer", "exterieur", "extraire", "extraordinaire", "face", "facile", "faciliter", "façon", "faible", "faille", "faim", "faire", "fais", "fait", "falloir", "fameux", "famille", "fantaisie", "fantome", "farouche", "fatigue", "fatiguer", "faute", "faux", "faveur", "favori", "fecond", "femme", "fenetre", "fer", "fermer", "fertile", "fête", "feu", "feuille", "fiable", "fier", "figure", "filer", "filet", "fille", "fils", "fin", "final", "finir", "fixer", "flamme", "fleur", "fleuve", "flexible", "flotter", "foi", "foire", "fois", "folie", "fonction", "fonctionner", "fond", "fonder", "fondre", "force", "forcer", "foret", "forger", "formel", "former", "formuler", "fort", "fortune", "fou", "foule", "four", "fournir", "français", "franc", "frapper", "fraternité", "frequence", "frequent", "frere", "froid", "front", "fruit", "fuir", "fumee", "fumer", "futur", "gagner", "gage", "galerie", "gang", "garde", "garder", "gare", "gauche", "gener", "general", "generer", "genial", "genie", "genou", "gens", "genre", "geometrie", "germe", "geste", "gestion", "glace", "glorieux", "gomme", "gorge", "gourmand", "gout", "goûter", "gouvernement", "gouverner", "grâce", "graduel", "grand", "grandir", "grappe", "gras", "grave", "gravir", "greve", "grimper", "gros", "guerir", "guerre", "guide", "guider", "habile", "habiller", "habiter", "habitude", "haine", "haïr", "haleine", "haut", "hauteur", "herbe", "hesiter", "heure", "heureusement", "hier", "histoire", "hiver", "homme", "honneur", "honnete", "horizon", "horreur", "hotel", "huile", "huit", "humain", "humble", "humoristique", "identification", "identifier", "ignorer", "il", "ile", "image", "imaginer", "imitation", "imiter", "immense", "immobilier", "impossible", "impression", "imprimer", "inaugurer", "incapable", "incliner", "inclure", "indemnite", "independant", "indiquer", "individu", "industriel", "inevitable", "inférieur", "infliger", "influencer", "informer", "ingénieur", "ingredient", "initial", "initiative", "injecter", "injure", "inquiet", "inquietude", "inscrire", "insecte", "inserer", "insister", "inspecter", "inspiration", "inspirer", "instant", "instinct", "instituer", "instruire", "intelligence", "intense", "intention", "interdire", "interesser", "interet", "interieur", "interpreter", "interroger", "interrompre", "intervenir", "intime", "introduire", "inutile", "inventer", "investir", "inviter", "jadis", "jaillir", "jalousie", "jamais", "jambe", "jardin", "jaune", "je", "jet", "jeter", "jeu", "jeudi", "jeune", "joie", "joindre", "joli", "joue", "jouer", "jouir", "jour", "journal", "juge", "juger", "juillet", "juin", "jumeau", "jurer", "juste", "justice", "lacher", "laid", "lait", "lame", "lampe", "lancer", "langage", "langue", "large", "larme", "laver", "leçon", "lecteur", "legume", "lent", "lettre", "lever", "liberte", "libre", "lier", "lieu", "ligne", "limite", "linge", "lire", "lis", "liste", "lit", "litterature", "livre", "livrer", "loi", "loin", "lointain", "long", "longueur", "lot", "lourd", "loyer", "lucide", "lumiere", "lune", "lunettes", "lutte", "lutter", "luxueux", "machine", "magnifique", "maigre", "main", "maintenant", "maire", "maison", "maître", "majorité", "mal", "malade", "malgre", "malheur", "maman", "mander", "manger", "maniere", "manifester", "manque", "marchand", "marche", "marcher", "mardi", "mari", "mariage", "marin", "marquer", "masse", "matin", "mauvais", "mecanisme", "medecin", "meilleur", "melange", "melanger", "meme", "memoire", "menace", "menacer", "mener", "mentir", "mentionner", "menu", "mer", "merci", "mere", "meriter", "merveille", "mesure", "mesurer", "metal", "metre", "mettre", "midi", "mieux", "milieu", "militaire", "mille", "mince", "ministre", "minuit", "minute", "miracle", "miroir", "mission", "mode", "modele", "moderne", "modifier", "moindre", "moins", "mois", "moitie", "moment", "monde", "monnaie", "monsieur", "montagne", "monter", "montrer", "moral", "morceau", "moteur", "motif", "motiver", "mots", "mourir", "mouvement", "moyen", "mur", "muscle", "musique", "mystere", "nager", "naitre", "narration", "nation", "national", "nature", "naturel", "navire", "necessaire", "necessiter", "negatif", "negliger", "negocier", "neige", "nettoyer", "neuf", "niveau", "noir", "nombre", "nommer", "normal", "norme", "note", "noter", "notion", "nouvel", "nouveau", "novembre", "nuage", "nuance", "nuit", "nul", "obeir", "objet", "obliger", "obscur", "observer", "obstacle", "obtenir", "occasion", "occuper", "ocean", "octobre", "oeil", "oeuvre", "offenser", "officier", "offrir", "oignon", "oiseau", "ombre", "oncle", "onde", "onglet", "operation", "opinion", "opportunite", "opposition", "opter", "or", "orange", "ordinaire", "ordonner", "ordre", "oreille", "organiser", "orientation", "origine", "original", "oser", "oublier", "ouest", "ouvrir", "pacte", "page", "pain", "paix", "palais", "palmier", "papa", "papier", "paradis", "paraitre", "parallel", "parfum", "parler", "parmi", "part", "partager", "partie", "partir", "pas", "passage", "passager", "passer", "passion", "patient", "patron", "patte", "pause", "pauvre", "payer", "pays", "peau", "peine", "peintre", "pencher", "penetrer", "penser", "percevoir", "perdre", "pere", "parfait", "period", "permis", "permettre", "personne", "petit", "peur", "phénomène", "photographie", "phrase", "piece", "pied", "pierre", "pitié", "place", "placer", "plafond", "plage", "plaindre", "plaisir", "plan", "planter", "plateau", "plein", "pleurer", "pluie", "plume", "plus", "plusieurs", "plutôt", "poche", "poignee", "poing", "point", "pointer", "poisson", "police", "politique", "pomme", "pont", "populaire", "porte", "porter", "poser", "position", "posseder", "possible", "poste", "pot", "potence", "pouce", "poudre", "poulet", "pour", "pourquoi", "poursuivre", "pourtant", "pousser", "pouvoir", "pratique", "precaution", "precedent", "precher", "precieux", "preciser", "preferer", "premier", "prendre", "preparer", "presence", "present", "presenter", "presque", "presser", "pret", "preter", "preuve", "prevenir", "prevoir", "prier", "primaire", "prince", "principal", "printemps", "priorite", "prison", "prive", "privilege", "prix", "probable", "probleme", "proceder", "prochain", "produire", "professeur", "profit", "profiter", "profond", "programme", "progresser", "projet", "prolonger", "promenade", "promener", "promesse", "promettre", "prompt", "proposer", "propre", "proteger", "prouver", "provoquer", "prudent", "public", "puissance", "puissant", "punir", "pure", "quart", "quartier", "quatorze", "quatre", "question", "queue", "qui", "quitter", "quoi", "quotidien", "racine", "raconter", "radio", "raide", "raison", "ralentir", "ramasser", "ramener", "rang", "ranger", "rapide", "rappeler", "rapport", "rapporter", "rare", "rassembler", "rater", "ravir", "rayer", "rayon", "realiser", "recevoir", "rechercher", "reclamer", "recommander", "recompense", "reconnaître", "reconstruire", "recueillir", "reculer", "redresser", "reduire", "reel", "reflechir", "refuser", "regard", "regarder", "regle", "regler", "regretter", "regrouper", "rein", "rejoindre", "relation", "relatif", "relever", "religion", "remercier", "remettre", "remplacer", "remplir", "rencontrer", "rendre", "renforcer", "renoncer", "rentrer", "renvoyer", "reparer", "repas", "repartir", "repasser", "repeter", "repondre", "reporter", "repos", "reposer", "representer", "représenter", "reprocher", "reserver", "resider", "resister", "resoudre", "respecter", "respirer", "responsable", "ressembler", "ressort", "ressentir", "ressource", "rester", "restaurant", "restaurer", "resultat", "retenir", "retirer", "retour", "retourner", "retrouver", "reunion", "reussir", "reve", "reveiller", "reveler", "revenir", "rever", "revoir", "revue", "riche", "rideau", "rien", "rire", "risque", "risquer", "river", "robe", "robinet", "roc", "roche", "roi", "rompre", "rond", "rose", "rosee", "route", "rouge", "rouler", "royal", "rue", "rugby", "sable", "sac", "sage", "sain", "saint", "saisir", "saison", "salle", "salut", "sang", "satisfaire", "sauter", "sauver", "savant", "savoir", "scalaire", "scandale", "scene", "schema", "science", "scientifique", "score", "se", "sec", "secher", "second", "secret", "securite", "sejour", "selon", "semaine", "sembler", "semence", "sens", "sensible", "sentier", "sentiment", "sentir", "separer", "sept", "septembre", "sequence", "serieux", "serrer", "servir", "seul", "sexuel", "si", "siege", "sien", "signal", "signaler", "signature", "signer", "signifier", "silence", "simple", "simuler", "situation", "six", "social", "societe", "soeur", "soif", "soir", "sol", "soldat", "soleil", "solide", "solitaire", "solution", "sombre", "somme", "sommeil", "son", "songe", "sonner", "sorte", "sortie", "sortir", "souci", "souffrir", "souhaiter", "soulager", "soulever", "souligner", "soumettre", "soupçon", "souper", "source", "sourd", "sourire", "soutenir", "souvenir", "spacieux", "speciale", "specimen", "spectacle", "sport", "stade", "stage", "station", "statue", "stock", "stop", "strategie", "strict", "structure", "style", "subir", "succes", "suggérer", "suicide", "suivre", "superficie", "superieur", "supporter", "supposer", "surface", "surprendre", "surtout", "surveiller", "symbolique", "sympa", "système", "table", "tableau", "tache", "tacher", "tailler", "taire", "talent", "tandis", "tant", "tapis", "tard", "tasse", "tast", "technique", "tel", "telephone", "temoin", "tempete", "temps", "tendance", "tendre", "tendresse", "tenir", "tenter", "terminer", "terrain", "terme", "terrible", "terre", "terreur", "tester", "tete", "texte", "theatre", "tiens", "tigre", "timide", "tirer", "titre", "toi", "toile", "toit", "toler", "tolerer", "tomber", "ton", "total", "toucher", "toujours", "tour", "tourner", "tout", "tradition", "train", "traiter", "traitement", "tranche", "tranquille", "transferer", "transformer", "transmettre", "transporter", "travailler", "travail", "travers", "treize", "trentaine", "trente", "triangle", "tricolor", "triste", "tromper", "trop", "trouver", "tu", "tuer", "type", "ultime", "unir", "univers", "usage", "utile", "utiliser", "vache", "vacances", "vague", "vaincre", "valeur", "valide", "valoir", "vanter", "varier", "vaste", "veille", "veiller", "velocite", "vendre", "vendredi", "venger", "venir", "vent", "ventre", "verbe", "verif", "verifier", "verite", "verre", "vers", "vertical", "veste", "vetement", "vie", "vieil", "vieux", "vigilance", "vif", "village", "ville", "vin", "vingt", "violence", "violent", "violet", "visage", "visible", "vision", "visiter", "vite", "vivant", "vivre", "vocation", "voici", "voile", "voir", "voisin", "voiture", "voix", "vol", "voler", "volonte", "vouloir", "vous", "voyage", "voyager", "vrai", "vue", "wagon", "yeux", "zero", "zigzag", "zone", "zoologiste"
+        ];
+        
+        // Scrabble letter values (French)
+        const letterValues = {
+            'a': 1, 'e': 1, 'i': 1, 'l': 1, 'n': 1, 'o': 1, 'r': 1, 's': 1, 't': 1, 'u': 1,
+            'd': 2, 'g': 2, 'm': 2,
+            'b': 3, 'c': 3, 'p': 3,
+            'f': 4, 'h': 4, 'v': 4,
+            'j': 8, 'q': 8,
+            'k': 10, 'w': 10, 'x': 10, 'y': 10, 'z': 10
+        };
+
+        // Scrabble board size and special squares definition (0-indexed, 15x15)
+        const BOARD_SIZE = 15;
+        const specialSquares = {
+            '0,0': 'tw', '0,7': 'tw', '0,14': 'tw',
+            '7,0': 'tw', '7,14': 'tw',
+            '14,0': 'tw', '14,7': 'tw', '14,14': 'tw',
+            '1,1': 'dw', '2,2': 'dw', '3,3': 'dw', '4,4': 'dw',
+            '1,13': 'dw', '2,12': 'dw', '3,11': 'dw', '4,10': 'dw',
+            '10,4': 'dw', '11,3': 'dw', '12,2': 'dw', '13,1': 'dw',
+            '10,10': 'dw', '11,11': 'dw', '12,12': 'dw', '13,13': 'dw',
+            '1,5': 'tl', '1,9': 'tl',
+            '5,1': 'tl', '5,5': 'tl', '5,9': 'tl', '5,13': 'tl',
+            '9,1': 'tl', '9,5': 'tl', '9,9': 'tl', '9,13': 'tl',
+            '13,5': 'tl', '13,9': 'tl',
+            '0,3': 'dl', '0,11': 'dl',
+            '2,6': 'dl', '2,8': 'dl',
+            '3,0': 'dl', '3,7': 'dl', '3,14': 'dl',
+            '6,2': 'dl', '6,6': 'dl', '6,8': 'dl', '6,12': 'dl',
+            '7,3': 'dl', '7,11': 'dl',
+            '8,2': 'dl', '8,6': 'dl', '8,8': 'dl', '8,12': 'dl',
+            '11,0': 'dl', '11,7': 'dl', '11,14': 'dl',
+            '12,6': 'dl', '12,8': 'dl',
+            '14,3': 'dl', '14,11': 'dl',
+            '7,7': 'star' // Center Star
+        };
+
+        // 2D array to store letters on the board (0-indexed, 15x15)
+        let boardState = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(''));
+
+        // Column letters for display (A-O)
+        const columnLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
+
+        /**
+         * Affiche un message d'erreur.
+         * @param {string} message - Le message à afficher.
+         */
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorBox.classList.remove('hidden');
+        }
+
+        /**
+         * Masque le message d'erreur.
+         */
+        function hideError() {
+            errorBox.classList.add('hidden');
+        }
+
+        /**
+         * Vérifie si un mot peut être formé avec les lettres disponibles, en tenant compte des jokers.
+         * Utilisée pour le filtrage initial des mots du dictionnaire qui *pourraient* être formés à partir de la main du joueur.
+         * @param {string} word - Le mot à vérifier.
+         * @param {string} availableLettersString - La chaîne des lettres disponibles (ex: "abcef*").
+         * @returns {boolean} Vrai si le mot peut être formé, faux sinon.
+         */
+        function canFormWord(word, availableLettersString) {
+            let tempLetters = availableLettersString.split('');
+
+            for (let i = 0; i < word.length; i++) {
+                const char = word[i];
+                const index = tempLetters.indexOf(char);
+
+                if (index !== -1) {
+                    tempLetters.splice(index, 1);
+                } else {
+                    const jokerIndex = tempLetters.indexOf('*');
+                    if (jokerIndex !== -1) {
+                        tempLetters.splice(jokerIndex, 1);
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /**
+         * Trouve l'étendue complète d'un mot (début à fin) sur le plateau temporaire,
+         * étant donné une cellule (r,c) à l'intérieur de ce mot et une direction.
+         * @param {string[][]} board - L'état temporaire du plateau.
+         * @param {number} r - Ligne de la cellule de départ.
+         * @param {number} c - Colonne de la cellule de départ.
+         * @param {string} direction - 'horizontal' ou 'vertical'.
+         * @returns {{startR: number, startC: number, endR: number, endC: number}} L'étendue du mot.
+         */
+        function findWordExtent(board, r, c, direction) {
+            let startR = r, startC = c;
+            let endR = r, endC = c;
+
+            // Remonter pour trouver le vrai début du mot
+            if (direction === 'horizontal') {
+                while (startC > 0 && board[r][startC - 1] !== '') {
+                    startC--;
+                }
+                // Avancer pour trouver la vraie fin du mot
+                while (endC < BOARD_SIZE - 1 && board[r][endC + 1] !== '') {
+                    endC++;
+                }
+            } else { // vertical
+                while (startR > 0 && board[startR - 1][c] !== '') {
+                    startR--;
+                }
+                while (endR < BOARD_SIZE - 1 && board[endR + 1][c] !== '') {
+                    endR++;
+                }
+            }
+            return { startR, startC, endR, endC };
+        }
+
+        /**
+         * Calcule le score d'un mot sur le plateau, étant donné son étendue et les lettres qui ont été nouvellement placées.
+         * Cette fonction auxiliaire calcule le score pour un seul mot (principal ou perpendiculaire).
+         * @param {string[][]} board - L'état temporaire du plateau.
+         * @param {number} startR - Ligne de départ du mot.
+         * @param {number} startC - Colonne de départ du mot.
+         * @param {number} endR - Ligne de fin du mot.
+         * @param {number} endC - Colonne de fin du mot.
+         * @param {string} direction - 'horizontal' ou 'vertical'.
+         * @param {Array<object>} lettersPlacedByPlayerThisTurn - Tableau de {r, c, char} pour les lettres nouvellement placées par le joueur à ce tour.
+         * @returns {{score: number, word: string, wordMultiplier: number}} Le score, la chaîne du mot et son multiplicateur total de mot.
+         */
+        function scoreBoardWord(board, startR, startC, endR, endC, direction, lettersPlacedByPlayerThisTurn) {
+            let currentWordScore = 0;
+            let currentWordMultiplier = 1;
+            let wordChars = [];
+
+            for (let i = 0; ; i++) {
+                const r = startR + (direction === 'vertical' ? i : 0);
+                const c = startC + (direction === 'horizontal' ? i : 0);
+
+                if ( (direction === 'horizontal' && c > endC) || (direction === 'vertical' && r > endR) ) break;
+
+                const charOnBoard = board[r][c].toLowerCase();
+                wordChars.push(charOnBoard);
+
+                let letterVal = letterValues[charOnBoard] || 0; // Valeur de base de la lettre
+
+                // Vérifier si cette lettre spécifique sur le plateau a été nouvellement placée par le joueur à ce tour
+                const isLetterNewlyPlaced = lettersPlacedByPlayerThisTurn.some(lp => lp.r === r && lp.c === c);
+                const squareType = specialSquares[`${r},${c}`];
+
+                if (isLetterNewlyPlaced) {
+                    // Appliquer les multiplicateurs de lettre si nouvelle
+                    if (squareType === 'dl') letterVal *= 2;
+                    if (squareType === 'tl') letterVal *= 3;
+                    // Accumuler les multiplicateurs de mot pour CE mot
+                    if (squareType === 'dw' || squareType === 'star') currentWordMultiplier *= 2;
+                    if (squareType === 'tw') currentWordMultiplier *= 3;
+                }
+                currentWordScore += letterVal;
+            }
+            return { score: currentWordScore, word: wordChars.join(''), wordMultiplier: currentWordMultiplier };
+        }
+
+
+        /**
+         * Calcule le score complet d'un mouvement potentiel, y compris le mot principal et tous les mots perpendiculaires formés.
+         * Effectue également des vérifications de légalité pour le placement.
+         * @param {string} word - Le mot principal à placer (en minuscules).
+         * @param {number} startRow - Ligne de départ (0-14).
+         * @param {number} startCol - Colonne de départ (0-14).
+         * @param {string} direction - 'horizontal' ou 'vertical'.
+         * @param {string[][]} currentBoardState - L'état actuel du plateau (lettres en majuscules ou '').
+         * @param {string} playerHand - Les lettres de la main du joueur (minuscules, avec '*' pour les jokers).
+         * @returns {number | null} Score total pour le mouvement, ou null si le placement est invalide.
+         */
+        function calculateFullMoveScore(word, startRow, startCol, direction, currentBoardState, playerHand) {
+            let tempBoard = currentBoardState.map(row => [...row]); // Copie profonde pour la simulation
+            let workingHand = playerHand.split(''); // Copie modifiable de la main du joueur
+
+            let lettersPlacedByPlayer = []; // Stocke {r, c, char} pour les lettres *réellement placées de la main*
+            let mainWordUsesExistingLetter = false; // Vrai si le mot principal utilise au moins une lettre existante
+            let centerStarUsedByNewTile = false; // Vrai si une nouvelle tuile atterrit sur l'étoile centrale
+
+            // Étape 1: Simuler le placement du mot principal et les vérifications de légalité de base
+            for (let i = 0; i < word.length; i++) {
+                const r = startRow + (direction === 'vertical' ? i : 0);
+                const c = startCol + (direction === 'horizontal' ? i : 0);
+
+                if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) return null; // Hors limites
+
+                const boardChar = tempBoard[r][c].toLowerCase();
+                const wordChar = word[i];
+
+                if (boardChar !== '') {
+                    // Cellule déjà occupée
+                    if (boardChar !== wordChar) return null; // Discordance avec la lettre existante
+                    mainWordUsesExistingLetter = true;
+                } else {
+                    // Cellule est vide, doit utiliser une lettre de la main ou un joker
+                    const handIndex = workingHand.indexOf(wordChar);
+                    if (handIndex !== -1) {
+                        workingHand.splice(handIndex, 1);
+                    } else {
+                        const jokerIndex = workingHand.indexOf('*');
+                        if (jokerIndex !== -1) {
+                            workingHand.splice(jokerIndex, 1);
+                        } else {
+                            return null; // Pas assez de lettres/jokers en main
+                        }
+                    }
+                    tempBoard[r][c] = wordChar.toUpperCase(); // Placer la lettre sur le plateau temporaire
+                    lettersPlacedByPlayer.push({ r: r, c: c, char: wordChar });
+
+                    if (r === 7 && c === 7) { // Vérifier l'utilisation de l'étoile centrale par une nouvelle lettre
+                        centerStarUsedByNewTile = true;
+                    }
+                }
+            }
+
+            // Après avoir placé le mot principal, effectuer les vérifications de légalité générale du mouvement
+            if (lettersPlacedByPlayer.length === 0) return null; // Doit placer au moins une nouvelle tuile
+
+            let boardIsCurrentlyEmpty = currentBoardState.every(row => row.every(cell => cell === ''));
+
+            if (boardIsCurrentlyEmpty) {
+                if (!centerStarUsedByNewTile) return null; // Le premier mouvement doit couvrir l'étoile centrale
+            } else {
+                let connected = mainWordUsesExistingLetter; // Connecté par chevauchement d'une lettre existante
+                if (!connected) { // Si pas de chevauchement, vérifier si une lettre nouvellement placée est adjacente à une existante
+                    for (const { r, c } of lettersPlacedByPlayer) {
+                        const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+                        for (const [nr, nc] of neighbors) {
+                            if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && currentBoardState[nr][nc] !== '') {
+                                connected = true;
+                                break;
+                            }
+                        }
+                        if (connected) break;
+                    }
+                }
+                if (!connected) return null; // Doit se connecter aux tuiles existantes si le plateau n'est pas vide
+            }
+
+
+            // Étape 2: Valider et scorer tous les mots formés par ce placement (principal et perpendiculaires)
+            let totalScore = 0;
+
+            // Scorer le mot principal
+            const { startR: mainStartR, startC: mainStartC, endR: mainEndR, endC: mainEndC } = findWordExtent(tempBoard, startRow, startCol, direction);
+            const mainWordScored = scoreBoardWord(tempBoard, mainStartR, mainStartC, mainEndR, mainEndC, direction, lettersPlacedByPlayer);
+
+            // Valider le mot principal
+            if (!frenchDictionary.includes(mainWordScored.word)) {
+                return null;
+            }
+            totalScore += mainWordScored.score;
+
+
+            // Scorer les mots perpendiculaires pour chaque lettre nouvellement placée
+            for (const { r, c } of lettersPlacedByPlayer) { // Itérer uniquement sur les lettres nouvellement placées
+                const perpDirection = direction === 'horizontal' ? 'vertical' : 'horizontal';
+
+                // Trouver l'étendue complète du mot perpendiculaire formé par cette nouvelle lettre
+                const { startR: perpStartR, startC: perpStartC, endR: perpEndR, endC: perpEndC } = findWordExtent(tempBoard, r, c, perpDirection);
+
+                const perpLength = (perpDirection === 'horizontal' ? (perpEndC - perpStartC + 1) : (perpEndR - perpStartR + 1));
+
+                // Ne considérer que les mots perpendiculaires réels (longueur > 1)
+                if (perpLength > 1) {
+                    const perpWordScored = scoreBoardWord(tempBoard, perpStartR, perpStartC, perpEndR, perpEndC, perpDirection, lettersPlacedByPlayer);
+
+                    // Valider le mot perpendiculaire par rapport au dictionnaire
+                    if (!frenchDictionary.includes(perpWordScored.word)) {
+                        return null; // Le mouvement entier est invalide si un mot perpendiculaire est invalide
+                    }
+                    totalScore += perpWordScored.score;
+                }
+            }
+
+            // Appliquer le multiplicateur de mot global du mot principal au total général de tous les mots formés
+            totalScore *= mainWordScored.wordMultiplier;
+
+            // Bonus de 50 points si 7 lettres de la main sont utilisées (Scrabble/Bingo)
+            if (lettersPlacedByPlayer.length === 7) {
+                totalScore += 50;
+            }
+
+            return totalScore;
+        }
+
+
+        /**
+         * Initialise le plateau de Scrabble dans le DOM avec les en-têtes numérotés.
+         */
+        function initializeBoard() {
+            scrabbleBoardDiv.innerHTML = ''; // Effacer le plateau existant
+            // Créer les cellules d'en-tête (ligne 0 et colonne 0)
+            for (let i = 0; i <= BOARD_SIZE; i++) {
+                for (let j = 0; j <= BOARD_SIZE; j++) {
+                    const cell = document.createElement('div');
+                    if (i === 0 && j === 0) {
+                        cell.className = 'header-cell'; // Coin vide en haut à gauche
+                    } else if (i === 0) {
+                        cell.className = 'header-cell';
+                        cell.textContent = columnLetters[j - 1]; // En-têtes de colonne (A, B, C...)
+                    } else if (j === 0) {
+                        cell.className = 'header-cell';
+                        cell.textContent = i; // En-têtes de ligne (1, 2, 3...)
+                    } else {
+                        // Cellule de jeu normale
+                        const row = i - 1; // Ajustement pour le tableau boardState (0-indexé)
+                        const col = j - 1;
+
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+                        const squareType = specialSquares[`${row},${col}`] || 'normal';
+                        cell.className = `board-cell ${squareType}`;
+
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.maxLength = 1;
+                        input.value = boardState[row][col];
+                        input.oninput = (e) => {
+                            e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+                            boardState[row][col] = e.target.value;
+                            if (e.target.value) {
+                                cell.classList.add('has-letter');
+                            } else {
+                                cell.classList.remove('has-letter');
+                            }
+                            clearHighlights(); // Efface le surlignage quand le plateau est modifié
+                        };
+                        if (boardState[row][col]) {
+                            cell.classList.add('has-letter');
+                        }
+                        cell.appendChild(input);
+                    }
+                    scrabbleBoardDiv.appendChild(cell);
+                }
+            }
+        }
+
+        /**
+         * Efface toutes les lettres du plateau et réinitialise l'affichage.
+         */
+        function clearBoard() {
+            boardState = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(''));
+            initializeBoard(); // Réinitialise le plateau visuellement
+            clearHighlights(); // S'assure que tout surlignage est retiré
+        }
+
+        /**
+         * Applique le surlignage vert au meilleur mot trouvé sur le plateau.
+         * @param {object} placement - L'objet du meilleur placement ({ word, startRow, startCol, direction }).
+         */
+        function applyHighlightToBoard(placement) {
+            clearHighlights(); // D'abord, retirer tout surlignage précédent
+
+            const { word, startRow, startCol, direction } = placement;
+
+            for (let i = 0; i < word.length; i++) {
+                const r = startRow + (direction === 'vertical' ? i : 0);
+                const c = startCol + (direction === 'horizontal' ? i : 0);
+
+                // Trouver la cellule DOM correspondante (index ajusté pour les en-têtes)
+                const cellElement = scrabbleBoardDiv.children[(r + 1) * (BOARD_SIZE + 1) + (c + 1)];
+                if (cellElement) {
+                    cellElement.classList.add('highlight-best-word');
+                }
+            }
+        }
+
+        /**
+         * Retire tout surlignage du plateau.
+         */
+        function clearHighlights() {
+            document.querySelectorAll('.highlight-best-word').forEach(cell => {
+                cell.classList.remove('highlight-best-word');
+            });
+        }
+
+
+        /**
+         * Fonction principale pour trouver les mots et leurs placements optimaux.
+         */
+        findWordsBtn.addEventListener('click', async () => {
+            hideError();
+            clearHighlights(); // Toujours effacer les surlignages au début d'une nouvelle recherche
+            const inputLetters = lettersInput.value.trim();
+
+            if (inputLetters.length === 0) {
+                showError("Veuillez entrer au moins une lettre ou un joker dans votre main.");
+                resultsDiv.innerHTML = '<p class="text-center text-gray-500">Les suggestions de placement et de score apparaîtront ici.</p>';
+                return;
+            }
+
+            loadingDiv.classList.remove('hidden');
+            loadingMessageSpan.textContent = "Recherche des mots possibles à partir de votre main...";
+            resultsDiv.innerHTML = '';
+            findWordsBtn.disabled = true;
+            lettersInput.disabled = true;
+
+            const allPossibleWordsFromHand = [];
+
+            // Étape 1: Trouver tous les mots valides que l'on peut former UNIQUEMENT avec les lettres de la main
+            await new Promise(resolve => setTimeout(() => {
+                for (let word of frenchDictionary) {
+                    // Vérifie que le mot peut être formé avec les lettres de la main et qu'il est de longueur Scrabble valide
+                    // La main d'un joueur au Scrabble a généralement 7 lettres.
+                    if (word.length >= 2 && word.length <= 7 && canFormWord(word, inputLetters)) {
+                        allPossibleWordsFromHand.push(word);
+                    }
+                }
+                resolve();
+            }, 50)); // Petite pause pour l'UI
+
+            loadingMessageSpan.textContent = `Simulation de ${allPossibleWordsFromHand.length} mots sur le plateau...`;
+
+            const bestPlacements = [];
+
+            // Étape 2: Pour chaque mot trouvé, simuler son placement à toutes les positions possibles
+            // et calculer le score potentiel, y compris la validation des mots perpendiculaires
+            await new Promise(resolve => setTimeout(() => {
+                const directions = ['horizontal', 'vertical'];
+
+                for (const word of allPossibleWordsFromHand) {
+                    for (let r = 0; r < BOARD_SIZE; r++) { // Ligne de départ
+                        for (let c = 0; c < BOARD_SIZE; c++) { // Colonne de départ
+                            for (const direction of directions) {
+                                // calculateFullMoveScore retournera null si une règle est violée (ex: mot perp. invalide)
+                                const totalMoveScore = calculateFullMoveScore(word, r, c, direction, boardState, inputLetters);
+                                if (totalMoveScore !== null) {
+                                    bestPlacements.push({
+                                        word: word,
+                                        score: totalMoveScore,
+                                        startRow: r,
+                                        startCol: c,
+                                        direction: direction
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                resolve();
+            }, 50)); // Petite pause pour l'UI
+
+            // Étape 3: Trier les placements par score (décroissant)
+            bestPlacements.sort((a, b) => b.score - a.score);
+
+            loadingDiv.classList.add('hidden');
+            findWordsBtn.disabled = false;
+            lettersInput.disabled = false;
+
+            if (bestPlacements.length > 0) {
+                const ul = document.createElement('ul');
+                ul.className = 'list-disc list-inside text-left space-y-1';
+                // Limiter l'affichage aux 50 meilleurs placements pour éviter l'encombrement
+                const displayLimit = Math.min(bestPlacements.length, 50);
+                for (let i = 0; i < displayLimit; i++) {
+                    const item = bestPlacements[i];
+                    const li = document.createElement('li');
+                    const directionText = item.direction === 'horizontal' ? 'HORIZ' : 'VERT';
+                    // Convertir les coordonnées 0-indexées en 1-indexées pour l'affichage
+                    const displayRow = item.startRow + 1;
+                    const displayColLetter = columnLetters[item.startCol];
+                    li.innerHTML = `<span class="font-bold text-blue-700">${item.word.toUpperCase()}</span> - <span class="font-extrabold text-green-700">${item.score}</span> points <br> (<span class="text-gray-600">Position: ${displayColLetter}${displayRow} | Direction: ${directionText}</span>)`;
+                    ul.appendChild(li);
+                }
+                resultsDiv.appendChild(ul);
+
+                if (bestPlacements.length > displayLimit) {
+                    const moreText = document.createElement('p');
+                    moreText.className = 'text-center text-gray-500 mt-2 text-sm';
+                    moreText.textContent = `... et ${bestPlacements.length - displayLimit} autres placements.`;
+                    resultsDiv.appendChild(moreText);
+                }
+
+                // Surligner le meilleur mot sur le plateau
+                applyHighlightToBoard(bestPlacements[0]);
+            } else {
+                resultsDiv.innerHTML = '<p class="text-center text-gray-500">Aucun placement valide trouvé avec vos lettres sur le plateau actuel.</p>';
+            }
+        });
+
+        // Permet de déclencher la recherche avec la touche Entrée
+        lettersInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                findWordsBtn.click();
+            }
+        });
+
+        // Événement pour le bouton "Effacer le plateau"
+        clearBoardBtn.addEventListener('click', clearBoard);
+
+        // Initialisation du plateau au chargement de la page
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeBoard();
+        });
+    </script>
+</body>
+</html>

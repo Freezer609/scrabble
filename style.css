@@ -1,0 +1,139 @@
+body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a2e;
+            background-image: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+            flex-wrap: wrap;
+            gap: 20px;
+            color: #e0e0e0;
+        }
+        input:disabled, button:disabled {
+            cursor: not-allowed;
+            background-color: #333;
+            opacity: 0.7;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .animate-spin-custom {
+            animation: spin 1s linear infinite;
+        }
+
+        #scrabble-board {
+            display: grid;
+            grid-template-columns: auto repeat(15, 1fr);
+            grid-template-rows: auto repeat(15, 1fr);
+            width: clamp(300px, 95vw, 600px);
+            height: clamp(300px, 95vw, 600px);
+            border: 2px solid rgba(100, 100, 255, 0.5);
+            background-color: rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 15px rgba(100, 100, 255, 0.4), 0 0 30px rgba(100, 100, 255, 0.2);
+            border-radius: 8px;
+            overflow: hidden;
+            grid-auto-flow: row dense;
+        }
+        .board-cell, .header-cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: #bbb;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-sizing: border-box;
+            user-select: none;
+            transition: background-color 0.3s ease;
+            min-width: 0;
+            min-height: 0;
+            position: relative;
+        }
+        .header-cell {
+            background-color: #2a2a4a;
+            color: #e0e0e0;
+            font-size: 0.8rem;
+        }
+        .header-cell:first-child {
+            background-color: #1f1f3f;
+        }
+        .board-cell {
+            font-size: 0.75rem;
+        }
+
+        .board-cell input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            border: none;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #f0f0f0;
+            background: transparent;
+            text-transform: uppercase;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .normal { background-color: #333; }
+        .dl { background-color: #4a69bd; }
+        .tl { background-color: #294896; }
+        .dw { background-color: #d63031; }
+        .tw { background-color: #b31e1e; }
+        .star { background-color: #feca57; }
+
+        .dl::before { content: 'LD'; color: #fff; opacity: 0.7; }
+        .tl::before { content: 'LT'; color: #fff; opacity: 0.7; }
+        .dw::before { content: 'MD'; color: #fff; opacity: 0.7; }
+        .tw::before { content: 'MT'; color: #fff; opacity: 0.7; }
+        .star::before { content: '★'; color: #333; font-size: 1.5rem; }
+
+        .board-cell.has-letter::before {
+            content: none !important;
+        }
+        .board-cell.has-letter input {
+            font-size: 1.8rem;
+        }
+
+        .highlight-best-word {
+            background-color: #2ecc71 !important;
+            color: white !important;
+            box-shadow: inset 0 0 0 2px #27ae60;
+        }
+        .highlight-best-word input {
+            color: white !important;
+        }
+
+        #results ul {
+            columns: 2;
+            -webkit-columns: 2;
+            -moz-columns: 2;
+            column-gap: 20px;
+        }
+        #results li {
+            margin-bottom: 5px;
+        }
+        @media (max-width: 640px) {
+            #results ul {
+                columns: 1;
+            }
+        }
+
+        .nexus-v-logo {
+            font-size: 2.5rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, #6a82fb, #fc5c7d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 10px rgba(106, 130, 251, 0.7), 0 0 20px rgba(252, 92, 125, 0.5);
+            display: inline-block;
+            margin-right: 1rem;
+        }

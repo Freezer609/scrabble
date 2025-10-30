@@ -92,12 +92,16 @@ async function loadDictionary() {
 }
 
 function showError(message) {
-    errorMessage.textContent = message;
-    errorBox.classList.remove('hidden');
+    if (errorMessage) {
+        errorMessage.textContent = message;
+        errorBox.classList.remove('hidden');
+    }
 }
 
 function hideError() {
-    errorBox.classList.add('hidden');
+    if (errorBox) {
+        errorBox.classList.add('hidden');
+    }
 }
 
 function canFormWord(word, availableLettersString) {
@@ -333,6 +337,7 @@ function clearBoard() {
 
 function applyHighlightToBoard(placement) {
     clearHighlights();
+    if (!scrabbleBoardDiv) return;
 
     const { word, startRow, startCol, direction } = placement;
 
@@ -348,9 +353,11 @@ function applyHighlightToBoard(placement) {
 }
 
 function clearHighlights() {
-    document.querySelectorAll('.highlight-best-word').forEach(cell => {
-        cell.classList.remove('highlight-best-word');
-    });
+    if (scrabbleBoardDiv) {
+        document.querySelectorAll('.highlight-best-word').forEach(cell => {
+            cell.classList.remove('highlight-best-word');
+        });
+    }
 }
 
 function performSave() {
@@ -408,42 +415,21 @@ function loadBoard(event) {
     reader.readAsText(file);
 }
 
+// =================================================================
+// NOUVELLE FONCTION DE CALCUL (le "Moteur")
+// =================================================================
 
-findWordsBtn.addEventListener('click', async () => {
-    hideError();
-    clearHighlights();
-    const inputLetters = lettersInput.value.trim();
-
-    if (inputLetters.length === 0) {
-        showError("Veuillez entrer au moins une lettre ou un joker dans votre main.");
-        resultsDiv.innerHTML = '<p class="text-center text-gray-400">Les suggestions de placement et de score apparaîtront ici.</p>';
-        return;
-    }
-
-    if (frenchDictionary.length === 0) {
-        showError("Le dictionnaire n'est pas encore chargé. Veuillez patienter un instant ou rafraîchir la page.");
-        return;
-    }
-
-
-    loadingDiv.classList.remove('hidden');
-    loadingMessageSpan.textContent = "Recherche des mots possibles à partir de votre main...";
-    resultsDiv.innerHTML = '';
-    findWordsBtn.disabled = true;
-    lettersInput.disabled = true;
-
+async function findBestMoves(currentBoardState, playerHand) {
     const allPossibleWordsFromHand = [];
 
     await new Promise(resolve => setTimeout(() => {
         for (let word of frenchDictionary) {
-            if (word.length >= 2 && word.length <= 7 && canFormWord(word, inputLetters)) {
+            if (word.length >= 2 && word.length <= 7 && canFormWord(word, playerHand)) {
                 allPossibleWordsFromHand.push(word);
             }
         }
         resolve();
-    }, 50));
-
-    loadingMessageSpan.textContent = `Simulation de ${allPossibleWordsFromHand.length} mots sur le plateau...`;
+    }, 10));
 
     const bestPlacements = [];
 
@@ -454,7 +440,7 @@ findWordsBtn.addEventListener('click', async () => {
             for (let r = 0; r < BOARD_SIZE; r++) {
                 for (let c = 0; c < BOARD_SIZE; c++) {
                     for (const direction of directions) {
-                        const totalMoveScore = calculateFullMoveScore(word, r, c, direction, boardState, inputLetters);
+                        const totalMoveScore = calculateFullMoveScore(word, r, c, direction, currentBoardState, playerHand);
                         if (totalMoveScore !== null) {
                             bestPlacements.push({
                                 word: word,
@@ -469,62 +455,128 @@ findWordsBtn.addEventListener('click', async () => {
             }
         }
         resolve();
-    }, 50));
+    }, 10));
 
     bestPlacements.sort((a, b) => b.score - a.score);
+    return bestPlacements;
+}
 
-    loadingDiv.classList.add('hidden');
-    findWordsBtn.disabled = false;
-    lettersInput.disabled = false;
+// =================================================================
+// INITIALISATION DE LA PAGE (pour ton site index.html)
+// =================================================================
 
-    if (bestPlacements.length > 0) {
-        const ul = document.createElement('ul');
-        ul.className = 'list-disc list-inside text-left space-y-1';
-        const displayLimit = Math.min(bestPlacements.length, 50);
-        for (let i = 0; i < displayLimit; i++) {
-            const item = bestPlacements[i];
-            const li = document.createElement('li');
-            const directionText = item.direction === 'horizontal' ? 'HORIZ' : 'VERT';
-            const displayRow = item.startRow + 1;
-            const displayColLetter = columnLetters[item.startCol];
-            li.innerHTML = `<span class="font-bold text-purple-400">${item.word.toUpperCase()}</span> - <span class="font-extrabold text-green-400">${item.score}</span> points <br> (<span class="text-gray-400">Position: ${displayColLetter}${displayRow} | Direction: ${directionText}</span>)`;
-            ul.appendChild(li);
+// On vérifie si on est dans l'iFrame ou sur le site principal
+const isNotInIframe = (window.self === window.top);
+
+if (isNotInIframe) {
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeBoard();
+        loadDictionary();
+
+        findWordsBtn.addEventListener('click', async () => {
+            hideError();
+            clearHighlights();
+            const inputLetters = lettersInput.value.trim();
+
+            if (inputLetters.length === 0) {
+                showError("Veuillez entrer au moins une lettre ou un joker dans votre main.");
+                resultsDiv.innerHTML = '<p class="text-center text-gray-400">Les suggestions de placement et de score apparaîtront ici.</p>';
+                return;
+            }
+
+            if (frenchDictionary.length === 0) {
+                showError("Le dictionnaire n'est pas encore chargé. Veuillez patienter un instant ou rafraîchir la page.");
+                return;
+            }
+
+            loadingDiv.classList.remove('hidden');
+            loadingMessageSpan.textContent = "Recherche des mots possibles à partir de votre main...";
+            resultsDiv.innerHTML = '';
+            findWordsBtn.disabled = true;
+            lettersInput.disabled = true;
+
+            // Appel de la nouvelle fonction "Moteur"
+            const bestPlacements = await findBestMoves(boardState, inputLetters);
+
+            loadingMessageSpan.textContent = `Simulation terminée...`;
+            loadingDiv.classList.add('hidden');
+            findWordsBtn.disabled = false;
+            lettersInput.disabled = false;
+
+            if (bestPlacements.length > 0) {
+                const ul = document.createElement('ul');
+                ul.className = 'list-disc list-inside text-left space-y-1';
+                const displayLimit = Math.min(bestPlacements.length, 50);
+                for (let i = 0; i < displayLimit; i++) {
+                    const item = bestPlacements[i];
+                    const li = document.createElement('li');
+                    const directionText = item.direction === 'horizontal' ? 'HORIZ' : 'VERT';
+                    const displayRow = item.startRow + 1;
+                    const displayColLetter = columnLetters[item.startCol];
+                    li.innerHTML = `<span class="font-bold text-purple-400">${item.word.toUpperCase()}</span> - <span class="font-extrabold text-green-400">${item.score}</span> points <br> (<span class="text-gray-400">Position: ${displayColLetter}${displayRow} | Direction: ${directionText}</span>)`;
+                    ul.appendChild(li);
+                }
+                resultsDiv.appendChild(ul);
+
+                if (bestPlacements.length > displayLimit) {
+                    const moreText = document.createElement('p');
+                    moreText.className = 'text-center text-gray-500 mt-2 text-sm';
+                    moreText.textContent = `... et ${bestPlacements.length - displayLimit} autres placements.`;
+                    resultsDiv.appendChild(moreText);
+                }
+
+                applyHighlightToBoard(bestPlacements[0]);
+            } else {
+                resultsDiv.innerHTML = '<p class="text-center text-gray-400">Aucun placement valide trouvé avec vos lettres sur le plateau actuel.</p>';
+            }
+        });
+
+        lettersInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                findWordsBtn.click();
+            }
+        });
+
+        clearBoardBtn.addEventListener('click', clearBoard);
+        saveBoardBtn.addEventListener('click', showSaveModal);
+        loadBoardBtn.addEventListener('click', () => loadBoardInput.click());
+        loadBoardInput.addEventListener('change', loadBoard);
+
+        cancelSaveBtn.addEventListener('click', hideSaveModal);
+        confirmSaveBtn.addEventListener('click', performSave);
+        saveFilenameInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                performSave();
+            }
+        });
+    });
+} else {
+    // =================================================================
+    // MODE IFRAME (pour Tampermonkey)
+    // =================================================================
+    
+    // Charger le dictionnaire dès que possible
+    document.addEventListener('DOMContentLoaded', () => {
+        loadDictionary();
+    });
+
+    // Écouter les messages venant du script Tampermonkey
+    window.addEventListener('message', async (event) => {
+        // La sécurité est gérée par le script Tampermonkey qui vérifie l'origine
+        // de la *réponse*. L'iFrame répond simplement à toute demande.
+        
+        if (event.data && event.data.type === 'CALCULATE_MOVE') {
+            const { board, letters } = event.data.data;
+
+            if (frenchDictionary.length === 0) {
+                 event.source.postMessage({ type: 'CALCULATION_ERROR', error: 'Dictionnaire pas encore chargé.' }, event.origin);
+                 return;
+            }
+            
+            // Appel de la nouvelle fonction "Moteur"
+            const bestPlacements = await findBestMoves(board, letters);
+
+            // Renvoyer la réponse au script Tampermonkey
+            event.source.postMessage({ type: 'CALCULATION_COMPLETE', results: bestPlacements }, event.origin);
         }
-        resultsDiv.appendChild(ul);
-
-        if (bestPlacements.length > displayLimit) {
-            const moreText = document.createElement('p');
-            moreText.className = 'text-center text-gray-500 mt-2 text-sm';
-            moreText.textContent = `... et ${bestPlacements.length - displayLimit} autres placements.`;
-            resultsDiv.appendChild(moreText);
-        }
-
-        applyHighlightToBoard(bestPlacements[0]);
-    } else {
-        resultsDiv.innerHTML = '<p class="text-center text-gray-400">Aucun placement valide trouvé avec vos lettres sur le plateau actuel.</p>';
-    }
-});
-
-lettersInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') {
-        findWordsBtn.click();
-    }
-});
-
-clearBoardBtn.addEventListener('click', clearBoard);
-saveBoardBtn.addEventListener('click', showSaveModal);
-loadBoardBtn.addEventListener('click', () => loadBoardInput.click());
-loadBoardInput.addEventListener('change', loadBoard);
-
-cancelSaveBtn.addEventListener('click', hideSaveModal);
-confirmSaveBtn.addEventListener('click', performSave);
-saveFilenameInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') {
-        performSave();
-    }
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    initializeBoard();
-    loadDictionary();
-});
+    });
